@@ -1,11 +1,14 @@
 import io
 import os
+import platform
 import re
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import hexss
 
 hexss.check_packages('flask>=3.0', 'flask-sqlalchemy>=3.1', 'openpyxl', 'tzdata', auto_install=True)
+if platform.system() != "Windows":
+    hexss.check_packages('gunicorn', auto_install=True)
 
 from flask import (Flask, abort, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
@@ -787,4 +790,4 @@ def api_plan(line):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5004, debug=False)
+    app.run(host="0.0.0.0", port=22000, debug=False)
