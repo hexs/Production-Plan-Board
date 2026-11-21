@@ -1,0 +1,231 @@
+{% extends "base.html" %}{% block title %}HW {{ p.line }} {{ p.day }}{% endblock %}
+{% block body %}
+<div class="wrap">
+  <div class="card bar">
+    <h1>HW {{ p.line }}</h1>
+    <div class="date-nav">
+      <a href="{{ url_for('plan_page', line=p.line, d=prev) }}">« วันก่อน</a>
+      <b>{{ p.day.strftime('%d %b %Y') }}</b>
+      <a href="{{ url_for('plan_page', line=p.line, d=nxt) }}">วันถัดไป »</a>
+    </div>
+    <span class="badge rev">Rev.{{ '%02d' % p.rev }}</span>
+
+    <form method="post" action="{{ url_for('meta', line=p.line, d=p.day) }}" class="bar sp">
+      <select name="mode" onchange="this.form.op.value='mode';this.form.submit()" aria-label="ช่วงเวลาทำงาน">
+        {% for k, m in modes.items() %}
+        <option value="{{ k }}" {{ 'selected' if k == p.mode }}>{{ m.label }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="op" value="mode">
+      <button name="op" value="rev" class="g">ออก Rev ใหม่</button>
+      <a href="{{ url_for('export_excel', line=p.line, d=p.day) }}" class="btn excel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>
+        </svg>
+        Export Excel
+      </a>
+      <a href="{{ url_for('display', line=p.line) }}" target="_blank" class="btn g">เปิดจอ TV</a>
+      <a href="{{ url_for('index', d=p.day) }}" class="btn g">หน้าแรก</a>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>แผนการผลิต</h2>
+    <datalist id="models">{% for x in products %}<option value="{{ x.model }}" data-ct="{{ x.cycle_time }}">{% endfor %}</datalist>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:56px">ลำดับ</th>
+            <th class="l">Model</th>
+            <th>WO</th>
+            <th>Qty วันนี้</th>
+            <th>LOT</th>
+            <th>CT (s)</th>
+            <th>UPH</th>
+            <th>เวลาตามแผน</th>
+            <th>Remark</th>
+            <th style="width:190px">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for j in d.jobs %}
+          <tr>
+            <td>
+              <b>{{ loop.index }}</b>
+              <form id="f{{ j.id }}" method="post" action="{{ url_for('item_op', iid=j.id) }}"></form>
+            </td>
+            <td><input form="f{{ j.id }}" name="model" value="{{ j.model }}" list="models" required></td>
+            <td><input form="f{{ j.id }}" name="wo" value="{{ j.wo }}"></td>
+            <td><input form="f{{ j.id }}" class="n" name="qty" type="number" value="{{ j.qty }}" required></td>
+            <td><input form="f{{ j.id }}" class="n" name="lot" type="number" value="{{ j.lot }}"></td>
+            <td><input form="f{{ j.id }}" class="n" name="ct" type="number" step="0.01" value="{{ j.ct }}" required></td>
+            <td><b>{{ j.uph }}</b></td>
+            <td style="white-space:nowrap">
+              {% if j.co %}<div class="mute sm">เปลี่ยนรุ่น {{ j.co.start }}–{{ j.co.end }}</div>{% endif %}
+              {% if j.start %}<div><b>{{ j.start }}–{{ j.end }}</b></div>{% endif %}
+              {% if j.over %}<div><span class="badge over">เกินเวลา {{ j.over }} ชิ้น</span></div>{% endif %}
+            </td>
+            <td><input form="f{{ j.id }}" name="remark" value="{{ j.remark }}" placeholder="หมายเหตุ"></td>
+            <td>
+              <div class="act-btns">
+                <button form="f{{ j.id }}" name="op" value="save" class="sm">บันทึก</button>
+                <button form="f{{ j.id }}" name="op" value="up" class="g icon-btn sm" aria-label="เลื่อนขึ้น" title="เลื่อนขึ้น">↑</button>
+                <button form="f{{ j.id }}" name="op" value="down" class="g icon-btn sm" aria-label="เลื่อนลง" title="เลื่อนลง">↓</button>
+                <button form="f{{ j.id }}" name="op" value="del" class="x sm" onclick="return confirm('ลบ job นี้?')">ลบ</button>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="mute" style="padding:20px">ยังไม่มี job เพิ่มได้ที่ฟอร์มด้านล่าง</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form id="add" class="bar form-box" method="post" action="{{ url_for('add_item', line=p.line, d=p.day) }}">
+      <input name="model" list="models" placeholder="Model" required oninput="fillCT(this)" style="min-width:210px">
+      <input name="wo" placeholder="WO" style="min-width:160px">
+      <input class="n" name="qty" type="number" placeholder="Qty" required>
+      <input class="n" name="lot" type="number" placeholder="LOT">
+      <input class="n" name="ct" type="number" step="0.01" placeholder="CT (auto)">
+      <button>+ เพิ่ม job</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>กรอก Actual</h2>
+    <form id="af" method="post" action="{{ url_for('save_actual', line=p.line, d=p.day) }}">
+      {% macro tl_bg() %}{% for c in d.tl.gaps %}<i class="gp" style="left:{{ c.left }}%;width:{{ c.width }}%" title="พัก {{ c.start|hhmm }}–{{ c.end|hhmm }}"></i>{% endfor %}{% endmacro %}
+      <div class="scroll">
+        <div class="pg" style="min-width:calc(540px + {{ d.tl.total * 1.7 }}px)">
+          <div class="pr ph">
+            <div class="pj l">Job</div>
+            <div class="pt">เริ่มจริง</div>
+            <div class="pt">จบจริง</div>
+            <div class="ptl">
+              {{ tl_bg() }}
+              {% for c in d.tl.slots %}
+              <div class="ps hd" style="left:{{ c.left }}%;width:{{ c.width }}%">
+                <span>{{ c.start|hhmm }}</span>
+                <span>{{ c.end|hhmm }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="pd">Total Diff</div>
+          </div>
+
+          {% for j in d.jobs %}
+          <div class="pr">
+            <div class="pj l">
+              <b>{{ j.model }}</b>
+              <div class="mute sm">{{ j.wo }} ×{{ j.qty }}<br>แผน {{ j.start or '-' }}–{{ j.end or '-' }}</div>
+            </div>
+            <div class="pt">
+              <input type="time" name="s_{{ j.id }}" value="{{ j.act_start }}">
+              <button type="button" class="g sm" onclick="stamp('s_{{ j.id }}')">เริ่มตอนนี้</button>
+            </div>
+            <div class="pt">
+              <input type="time" name="e_{{ j.id }}" value="{{ j.act_end }}">
+              <button type="button" class="g sm" onclick="stamp('e_{{ j.id }}')">จบตอนนี้</button>
+            </div>
+            <div class="ptl">
+              {{ tl_bg() }}
+              {% for c in d.tl.slots %}
+                {% set act_v = j.actual[c.i] %}
+                {% set pln_v = j.plan[c.i] %}
+                <div class="ps" style="left:{{ c.left }}%;width:{{ c.width }}%">
+                  <span class="plan-val">{{ pln_v or '' }}</span>
+                  <input class="n {{ '' if act_v is none else ('is-ok' if act_v >= pln_v else 'is-bad') }}"
+                         inputmode="numeric"
+                         name="a_{{ j.id }}_{{ c.i }}"
+                         value="{{ '' if act_v is none else act_v }}">
+                </div>
+              {% endfor %}
+            </div>
+            <div class="pd">
+              {% if j.state != 'wait' %}
+              <span class="diff-pill s-{{ j.state }}">{{ '%+d' % j.diff }}</span>
+              {% else %}
+              <span class="mute">—</span>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <div class="pr">
+            <div style="flex:1;padding:20px;text-align:center" class="mute">ยังไม่มีรายการ job สำหรับกรอก Actual</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="bar" style="margin-top:14px">
+        <button>บันทึก Actual</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Cause of delay</h2>
+    <form class="bar form-box" style="margin-top:0;margin-bottom:14px" method="post" action="{{ url_for('add_delay', line=p.line, d=p.day) }}">
+      <input name="model" list="jm" placeholder="Model" style="min-width:170px">
+      <datalist id="jm">{% for j in d.jobs %}<option value="{{ j.model }}">{% endfor %}</datalist>
+      <label class="bar" style="gap:6px">เริ่ม <input type="time" name="start" value="{{ now }}" required></label>
+      <label class="bar" style="gap:6px">จบ <input type="time" name="end"></label>
+      <select name="cause">{% for c in causes %}<option>{{ c }}</option>{% endfor %}</select>
+      <input name="action" placeholder="Action / แนวทางแก้ไข" style="flex:1;min-width:180px">
+      <button>บันทึกการหยุด</button>
+    </form>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="l">Model</th>
+            <th>เริ่ม</th>
+            <th>จบ</th>
+            <th>นาที</th>
+            <th class="l">สาเหตุ</th>
+            <th class="l">Action</th>
+            <th style="width:150px">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for x in d.delays %}
+          <tr>
+            <td class="l"><b>{{ x.model or '-' }}</b></td>
+            <td>{{ x.start }}</td>
+            <td>{{ x.end or 'กำลังหยุด' }}</td>
+            <td><b>{{ x.minutes if x.minutes is not none else '-' }}</b></td>
+            <td class="l">{{ x.cause }}</td>
+            <td class="l">{{ x.action }}</td>
+            <td>
+              <form method="post" action="{{ url_for('delay_op', did=x.id) }}" class="act-btns">
+                {% if not x.end %}<button name="op" value="end" class="sm">จบตอนนี้</button>{% endif %}
+                <button name="op" value="del" class="x sm" onclick="return confirm('ลบรายการนี้?')">ลบ</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="mute" style="padding:16px">ยังไม่มีบันทึกการหยุดการผลิต</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="loss-summary">รวมเวลาสูญเสีย: <b class="{{ 's-bad' if d.loss > 0 else '' }}">{{ d.loss }} นาที</b></div>
+  </div>
+</div>
+
+<script>
+function fillCT(el){
+  const o=[...document.querySelectorAll('#models option')].find(o=>o.value===el.value);
+  if(o) el.form.ct.value=o.dataset.ct;
+}
+function stamp(name){
+  const f=document.getElementById('af'), d=new Date(), z=n=>String(n).padStart(2,'0');
+  f.elements[name].value=z(d.getHours())+':'+z(d.getMinutes());
+  f.requestSubmit();
+}
+</script>
+{% endblock %}

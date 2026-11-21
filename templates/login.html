@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block body %}
+<div class="wrap">
+    <div class="card login-card">
+        <h1>Production Plan Board</h1>
+        <div class="mute sm">กรุณากรอกรหัส PIN เพื่อเข้าใช้งาน</div>
+        <form method="post">
+            <input type="password" name="pin" placeholder="••••" autofocus required>
+            <button>เข้าสู่ระบบ</button>
+            {% if err %}
+            <div class="s-bad sm"><b>PIN ไม่ถูกต้อง</b></div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}

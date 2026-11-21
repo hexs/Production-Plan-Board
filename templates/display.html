@@ -1,0 +1,110 @@
+{% extends "base.html" %}{% block title %}HW {{ line }}{% endblock %}{% block body_class %}tv{% endblock %}
+{% block body %}
+<header>
+  <h1>HW {{ line }}</h1>
+  <div id="date"></div>
+  <div id="rev"></div>
+  <div id="clock"></div>
+</header>
+<section id="now"></section>
+<main id="board"></main>
+<footer id="foot"></footer>
+<div id="off" hidden>ขาดการเชื่อมต่อ แสดงข้อมูลล่าสุด</div>
+<script>
+const LINE = {{ line | tojson }}, Q = location.search, $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const nowMin = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
+let D = null, lastMin = -1;
+
+const f = m => { m %= 1440; return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0"); };
+
+function render() {
+  if (!D) return;
+  if (!D.exists) {
+    $("now").textContent = "ยังไม่มีแผนของวันนี้";
+    $("board").innerHTML = "";
+    $("foot").innerHTML = "";
+    return;
+  }
+  $("date").textContent = D.day;
+  $("rev").textContent = "Rev." + String(D.rev).padStart(2, "0");
+  let t = nowMin();
+  if (t < 480) t += 1440;
+  const TL = D.tl, S = TL.slots, END = TL.start + TL.total, x = m => (m - TL.start) / TL.total * 100;
+  const cur = S.find(s => t >= s.start && t < s.end);
+  const run = D.jobs.find(j => j.s_abs != null && t >= j.s_abs && t < j.e_abs);
+  const chg = D.jobs.find(j => j.co && t >= j.co.s_abs && t < j.co.e_abs);
+  const nxt = D.jobs.find(j => j.s_abs != null && j.s_abs > t && !(chg && j.id === chg.id));
+  const dl = v => v == null ? "" : ` <span class="${v > 0 ? "s-bad" : "s-ok"}">(${v > 0 ? "+" : ""}${v} นาที)</span>`;
+
+  if (chg) {
+    $("now").innerHTML = `<b>กำลังเปลี่ยนรุ่น</b> &nbsp; ${chg.co.start}–${chg.co.end} &nbsp; ถัดไป ${esc(chg.model)}`;
+  } else if (run) {
+    const p = Math.min(100, run.done / run.qty * 100);
+    $("now").innerHTML = `<b>${esc(run.model)}</b> &nbsp; <span class="mute">WO ${esc(run.wo)} &nbsp; ${run.uph}/ชม.</span>
+      <div class="prog"><i style="width:${p}%"></i></div>
+      ${run.done.toLocaleString()} / ${run.qty.toLocaleString()} ชิ้น
+      ${run.state !== "wait" ? `<b class="s-${run.state}"> &nbsp; ${run.diff > 0 ? "+" : ""}${run.diff}</b>` : ""}
+      &nbsp; <span class="mute">เริ่มจริง ${run.act_start || "--:--"}</span>${dl(run.start_delta)}`;
+  } else {
+    $("now").innerHTML = `<b>ไม่มีงานในช่วงนี้</b>`;
+  }
+
+  const rng = (a, b) => S.map(s => [Math.max(a, s.start), Math.min(b, s.end)]).filter(([l, h]) => h > l);
+  const bars = (rs, cls) => rs.map(([l, h]) => `<i class="bar ${cls}" style="left:${x(l)}%;width:${x(h) - x(l)}%"></i>`).join("");
+  const gaps = TL.gaps.map(g => `<i class="gap" style="left:${g.left}%;width:${g.width}%"></i>`).join("");
+  const nowl = t >= TL.start && t <= END ? `<i class="nowline" style="left:${x(t)}%"></i>` : "";
+  const cl = s => cur && cur.i === s.i ? "cur" : s.end <= t ? "past" : "";
+  const cell = (s, v, c = "") => `<div class="sl ${cl(s)} ${c}" style="left:${s.left}%;width:${s.width}%">${v}</div>`;
+
+  let h = `<div class="board-box"><div class="job hd"><div class="info">Model / WO</div><div class="lb"><span>ประเภท</span></div><div class="rowsx"><div class="tl hd">${gaps}${S.map(s =>
+    `<div class="sl ${cl(s)}" style="left:${s.left}%;width:${s.width}%"><span>${f(s.start)}</span><span>${f(s.end)}</span></div>`).join("")}${nowl}</div></div><div class="dsum">Diff</div></div>`;
+
+  for (const j of D.jobs) {
+    const planBar = j.s_abs != null ? bars(rng(j.s_abs, j.e_abs), "pl") : "";
+    let actBar = "";
+    if (j.act_s_abs != null) {
+      const a = j.act_s_abs, b = j.act_e_abs != null ? j.act_e_abs : Math.min(t, END),
+            pe = j.e_abs != null ? j.e_abs : Infinity;
+      if (b > a) actBar = bars(rng(a, Math.min(b, pe)), "ok") + bars(rng(Math.max(a, pe), b), "od");
+    }
+    h += `<div class="job"><div class="info"><b>${esc(j.model)}</b><span class="mute">WO ${esc(j.wo)} ×${j.qty}</span>
+      <span class="mute">แผน ${j.start || "-"}–${j.end || "-"}</span>
+      <span class="mute">จริง ${j.act_start || "--:--"}${dl(j.start_delta)} – ${j.act_end || "--:--"}${dl(j.end_delta)}</span></div>
+      <div class="lb"><span>Plan</span><span>Actual</span></div>
+      <div class="rowsx">
+        <div class="tl">${gaps}${S.map(s => cell(s, j.plan[s.i] || "")).join("")}${planBar}${nowl}</div>
+        <div class="tl">${gaps}${S.map(s => {
+          const a = j.actual[s.i], p = j.plan[s.i];
+          return cell(s, a ?? "", a == null ? "" : a < p ? "s-bad" : "s-ok");
+        }).join("")}${actBar}${nowl}</div>
+      </div>
+      <div class="dsum s-${j.state}">${j.state === "wait" ? "" : (j.diff > 0 ? "+" : "") + j.diff}</div></div>`;
+  }
+  h += `</div>`;
+  $("board").innerHTML = h;
+  $("foot").innerHTML = `<span class="${D.open_delay ? "s-bad" : ""}">หยุดวันนี้ <b>${D.delays.length}</b> ครั้ง รวม <b>${D.loss} นาที</b>${D.open_delay ? " (กำลังหยุดอยู่)" : ""}</span>
+    ${nxt ? `<span>ถัดไป: <b>${esc(nxt.model)}</b> ×${nxt.qty} เริ่ม ${nxt.start}</span>` : ""}
+    <div class="lg"><span><i class="pl"></i>Plan</span><span><i class="ok"></i>Actual</span><span><i class="od"></i>เกินแผน</span></div>`;
+}
+
+async function load() {
+  try {
+    const r = await fetch(`/api/plan/${LINE}${Q}`, {cache: "no-store"});
+    D = await r.json();
+    $("off").hidden = true;
+    render();
+  } catch (e) {
+    $("off").hidden = false;
+  }
+}
+
+setInterval(() => {
+  $("clock").textContent = new Date().toLocaleTimeString("en-GB");
+  const m = nowMin();
+  if (m !== lastMin) { lastMin = m; render(); }
+}, 1000);
+load();
+setInterval(load, 5000);
+</script>
+{% endblock %}

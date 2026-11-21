@@ -1,0 +1,73 @@
+{% extends "base.html" %}{% block body %}
+<div class="wrap">
+  <div class="bar" style="margin-bottom:16px">
+    <h1>Production Plan Board</h1>
+  </div>
+
+  <div class="card">
+    <form class="bar" method="get" style="margin-bottom:14px">
+      <label class="bar" style="gap:8px"><b>วันที่</b> <input type="date" name="d" value="{{ d }}"></label>
+      <button class="g">เลือกวัน</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="l">Production Line</th>
+            <th>จัดการแผน & Actual</th>
+            <th>หน้าจอแสดงผล</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for l in lines %}
+          <tr>
+            <td class="l"><b>HW {{ l }}</b></td>
+            <td><a class="btn sm" href="{{ url_for('plan_page', line=l, d=d) }}">แก้ไขแผน / กรอก Actual</a></td>
+            <td><a class="btn g sm" href="{{ url_for('display', line=l) }}" target="_blank">เปิดจอ TV</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Product master (Cycle time)</h2>
+    <div class="form-box" style="margin-top:0;margin-bottom:16px">
+      <form class="bar" method="post" action="{{ url_for('products') }}">
+        <input name="model" placeholder="Model" required style="min-width:220px">
+        <input class="n" name="ct" type="number" step="0.01" placeholder="CT (วินาที)" required>
+        <button>บันทึก</button>
+        <span class="mute sm">ใส่ Model เดิมเพื่อแก้ไขค่า CT</span>
+      </form>
+      <form class="bar" style="margin-top:10px" method="post" action="{{ url_for('products_import') }}" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx,.xlsm" required>
+        <button class="g">นำเข้าจากชีต data tact</button>
+      </form>
+    </div>
+
+    <div class="table-wrap" style="max-width:560px">
+      <table>
+        <thead>
+          <tr>
+            <th class="l">Model</th>
+            <th style="width:110px">CT (s)</th>
+            <th style="width:110px">UPH</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in products %}
+          <tr>
+            <td class="l"><b>{{ p.model }}</b></td>
+            <td>{{ p.cycle_time }}</td>
+            <td>{{ (3600 / p.cycle_time)|round|int }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="mute">ยังไม่มีข้อมูล Product master</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
